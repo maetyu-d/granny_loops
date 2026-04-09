@@ -75,7 +75,7 @@ const std::vector<GrannyAudioProcessor::PresetDefinition>& presetDefinitions()
         { "Shimmer Arc",   6.2f,  false, 0.46f, 150.0f, 10.5f, 1.04f, 1.82f, 0.28f, 0.24f, 0.24f, 0.34f, 0.62f, 0.58f, 0.62f, 0, 1,  9.0f },
         { "Dust Loop",     2.8f,  true,  0.22f,  72.0f, 26.0f, 0.58f, 2.20f, 0.52f, 0.62f, 0.18f, 0.72f, 0.38f, 0.34f, 0.57f, 2, 0, -6.0f },
         { "Cathedral",    18.5f,  false, 0.61f, 560.0f,  3.1f, 0.39f, 3.70f, 0.18f, 0.78f, 0.84f, 0.18f, 1.00f, 0.90f, 0.76f, 0, 2, -3.0f },
-        { "Strobe Mist",   0.72f, false, 0.51f,  18.0f, 48.0f, 1.42f, 0.78f, 0.76f, 0.24f, 0.10f, 0.86f, 0.16f, 0.16f, 0.50f, 2, 1,  0.0f },
+        { "Strobe Mist",   0.92f, false, 0.48f,  28.0f, 31.0f, 1.18f, 0.92f, 0.42f, 0.18f, 0.08f, 0.42f, 0.12f, 0.14f, 0.50f, 2, 1,  0.0f },
         { "Octave Drift",  4.8f,  false, 0.66f, 120.0f, 15.0f, 1.24f, 2.05f, 0.42f, 0.40f, 0.24f, 0.40f, 0.66f, 0.47f, 0.59f, 0, 2, 12.0f }
     };
 

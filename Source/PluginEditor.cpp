@@ -7,6 +7,7 @@ constexpr int textBoxHeight = 22;
 const auto white = juce::Colour::fromRGB (245, 245, 245);
 const auto whiteDim = juce::Colour::fromRGBA (255, 255, 255, 72);
 const auto whiteFaint = juce::Colour::fromRGBA (255, 255, 255, 28);
+const auto whiteGlow = juce::Colour::fromRGBA (255, 255, 255, 120);
 const auto panelFill = juce::Colour::fromRGB (7, 7, 7);
 const auto panelFillAlt = juce::Colour::fromRGB (10, 10, 10);
 const auto textDim = juce::Colour::fromRGB (150, 150, 150);
@@ -137,9 +138,11 @@ GrannyAudioProcessorEditor::GrannyAudioProcessorEditor (GrannyAudioProcessor& p)
     };
     presetBox.setSelectedItemIndex (audioProcessor.getCurrentProgram(), juce::dontSendNotification);
     addAndMakeVisible (presetBox);
+    registerTabKeyTarget (presetBox);
 
     freezeButton.setButtonText ("FREEZE");
     addAndMakeVisible (freezeButton);
+    registerTabKeyTarget (freezeButton);
 
     auto& state = audioProcessor.parameters;
     bufferAttachment = std::make_unique<SliderAttachment> (state, "bufferSeconds", bufferSlider);
@@ -164,6 +167,9 @@ GrannyAudioProcessorEditor::GrannyAudioProcessorEditor (GrannyAudioProcessor& p)
 
     setSize (1120, 620);
     setWantsKeyboardFocus (true);
+    setMouseClickGrabsKeyboardFocus (true);
+    setFocusContainerType (juce::Component::FocusContainerType::keyboardFocusContainer);
+    addKeyListener (this);
     startTimerHz (8);
 }
 
@@ -197,6 +203,7 @@ void GrannyAudioProcessorEditor::configureSlider (juce::Slider& slider, juce::La
     slider.setColour (juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
     slider.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     addAndMakeVisible (slider);
+    registerTabKeyTarget (slider);
 
     label.setText (text, juce::dontSendNotification);
     label.setJustificationType (juce::Justification::centredLeft);
@@ -208,11 +215,27 @@ void GrannyAudioProcessorEditor::configureSlider (juce::Slider& slider, juce::La
 void GrannyAudioProcessorEditor::configureCombo (juce::ComboBox& combo, juce::Label& label, const juce::String& text)
 {
     addAndMakeVisible (combo);
+    registerTabKeyTarget (combo);
     label.setText (text, juce::dontSendNotification);
     label.setJustificationType (juce::Justification::centredLeft);
     label.setFont (juce::Font (juce::FontOptions (12.0f).withStyle ("Bold")));
     label.setColour (juce::Label::textColourId, textDim);
     addAndMakeVisible (label);
+}
+
+void GrannyAudioProcessorEditor::registerTabKeyTarget (juce::Component& component)
+{
+    component.addKeyListener (this);
+    component.setWantsKeyboardFocus (true);
+}
+
+void GrannyAudioProcessorEditor::toggleVisualizer()
+{
+    showingVisualizer = ! showingVisualizer;
+    setControlsVisible (! showingVisualizer);
+    resized();
+    repaint();
+    grabKeyboardFocus();
 }
 
 void GrannyAudioProcessorEditor::setControlsVisible (bool shouldBeVisible)
@@ -271,91 +294,99 @@ void GrannyAudioProcessorEditor::paint (juce::Graphics& g)
         return;
     }
 
-    auto visualBounds = body.reduced (22);
-    g.setColour (whiteFaint);
-    g.drawRect (visualBounds, 1);
-
-    auto heading = visualBounds.removeFromTop (34);
-    g.setColour (textDim);
-    g.setFont (juce::Font (juce::FontOptions (12.0f).withStyle ("Bold")));
-    g.drawText ("GRAIN / LOOP VISUALISER", heading.removeFromLeft (240), juce::Justification::centredLeft);
-    g.setColour (whiteDim);
-    g.drawText ("TAB TO RETURN", heading.removeFromRight (180), juce::Justification::centredRight);
-
+    auto visualBounds = body.reduced (28);
     auto infoRow = visualBounds.removeFromTop (28);
-    const auto monitorText = outputMonitorBox.getText().isEmpty() ? juce::String ("Full") : outputMonitorBox.getText();
-    const auto engineText = stretchEngineBox.getText().isEmpty() ? juce::String ("Hybrid") : stretchEngineBox.getText();
     g.setColour (whiteDim);
-    g.drawText ("Monitor: " + monitorText + "   Engine: " + engineText + "   Freeze: "
-                + juce::String (audioProcessor.isFrozen() ? "On" : "Off"),
-                infoRow, juce::Justification::centredLeft);
+    g.setFont (juce::Font (juce::FontOptions (12.0f).withStyle ("Bold")));
+    g.drawText ("LOOP PORTRAIT", infoRow.removeFromLeft (220), juce::Justification::centredLeft);
+    g.drawText ("TAB", infoRow.removeFromRight (80), juce::Justification::centredRight);
 
-    auto waveformArea = visualBounds.reduced (24, 12);
-    const auto midY = waveformArea.getCentreY();
-    g.setColour (whiteFaint);
-    g.drawHorizontalLine (midY, (float) waveformArea.getX(), (float) waveformArea.getRight());
+    auto canvas = visualBounds.reduced (18, 8).toFloat();
+    const auto centre = canvas.getCentre();
+    const auto radius = juce::jmin (canvas.getWidth(), canvas.getHeight()) * 0.28f;
+    const auto scrub = juce::jlimit (0.0f, 1.0f, audioProcessor.getScrubPosition());
+    const auto grainMs = (float) grainSizeSlider.getValue();
+    const auto bufferSeconds = (float) bufferSlider.getValue();
+    const auto density = (float) densitySlider.getValue();
+    const auto loopSpan = juce::jlimit (0.08f, 0.72f, grainMs * 0.001f / juce::jmax (0.1f, bufferSeconds));
+    const auto startAngle = juce::MathConstants<float>::twoPi * scrub - juce::MathConstants<float>::halfPi;
+    const auto endAngle = startAngle + juce::MathConstants<float>::twoPi * loopSpan;
+
+    juce::Path halo;
+    halo.addEllipse (centre.x - radius * 1.15f, centre.y - radius * 1.15f, radius * 2.3f, radius * 2.3f);
+    g.setColour (juce::Colour::fromRGBA (255, 255, 255, 10));
+    g.strokePath (halo, juce::PathStrokeType (32.0f));
 
     if (! waveformSnapshot.empty())
     {
-        juce::Path waveformPath;
-        const auto width = (float) waveformArea.getWidth();
-        const auto halfHeight = (float) waveformArea.getHeight() * 0.42f;
+        juce::Path ribbon;
         const auto pointCount = std::max<size_t> (1, waveformSnapshot.size() - 1);
 
         for (size_t i = 0; i < waveformSnapshot.size(); ++i)
         {
-            const auto x = (float) waveformArea.getX() + (float) i / (float) pointCount * width;
+            const auto t = (float) i / (float) pointCount;
             const auto amp = juce::jlimit (0.0f, 1.0f, waveformSnapshot[i]);
-            const auto y = (float) midY - amp * halfHeight;
+            const auto angle = juce::MathConstants<float>::twoPi * t - juce::MathConstants<float>::halfPi;
+            const auto radial = radius * (0.62f + amp * 0.52f);
+            const auto x = centre.x + std::cos (angle) * radial;
+            const auto y = centre.y + std::sin (angle) * radial;
+
             if (i == 0)
-                waveformPath.startNewSubPath (x, y);
+                ribbon.startNewSubPath (x, y);
             else
-                waveformPath.lineTo (x, y);
+                ribbon.lineTo (x, y);
         }
 
-        for (size_t i = waveformSnapshot.size(); i-- > 0;)
-        {
-            const auto x = (float) waveformArea.getX() + (float) i / (float) pointCount * width;
-            const auto amp = juce::jlimit (0.0f, 1.0f, waveformSnapshot[i]);
-            const auto y = (float) midY + amp * halfHeight;
-            waveformPath.lineTo (x, y);
-        }
-
-        waveformPath.closeSubPath();
-        g.setColour (juce::Colour::fromRGBA (255, 255, 255, 16));
-        g.fillPath (waveformPath);
-        g.setColour (white);
-        g.strokePath (waveformPath, juce::PathStrokeType (0.9f));
+        ribbon.closeSubPath();
+        g.setColour (juce::Colour::fromRGBA (255, 255, 255, 18));
+        g.fillPath (ribbon);
+        g.setColour (whiteDim);
+        g.strokePath (ribbon, juce::PathStrokeType (1.0f));
     }
 
-    const auto scrubX = (float) waveformArea.getX() + audioProcessor.getScrubPosition() * (float) waveformArea.getWidth();
-    const auto grainMs = grainSizeSlider.getValue();
-    const auto bufferSeconds = bufferSlider.getValue();
-    const auto grainWidth = juce::jlimit (18.0f, (float) waveformArea.getWidth() * 0.65f,
-                                          (float) waveformArea.getWidth() * (float) (grainMs * 0.001 / juce::jmax (0.1, bufferSeconds)));
-    const auto loopRect = juce::Rectangle<float> (scrubX - grainWidth * 0.5f,
-                                                  (float) waveformArea.getY() + 18.0f,
-                                                  grainWidth,
-                                                  (float) waveformArea.getHeight() - 36.0f)
-                              .constrainedWithin (waveformArea.toFloat());
+    juce::Path loopArc;
+    loopArc.addCentredArc (centre.x, centre.y, radius, radius, 0.0f, startAngle, endAngle, true);
+    g.setColour (whiteGlow);
+    g.strokePath (loopArc, juce::PathStrokeType (3.2f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
-    g.setColour (white.withAlpha (0.16f));
-    g.fillRect (loopRect);
-    g.setColour (white.withAlpha (0.45f));
-    g.drawRect (loopRect, 1.0f);
-    g.setColour (white);
-    g.drawLine (scrubX, (float) waveformArea.getY(), scrubX, (float) waveformArea.getBottom(), 1.2f);
+    juce::Path scrubRay;
+    scrubRay.startNewSubPath (centre);
+    scrubRay.lineTo (centre.x + std::cos (startAngle) * radius * 1.12f,
+                     centre.y + std::sin (startAngle) * radius * 1.12f);
+    g.setColour (white.withAlpha (0.9f));
+    g.strokePath (scrubRay, juce::PathStrokeType (1.2f));
 
-    const auto density = densitySlider.getValue();
-    const auto grainCount = juce::jlimit (4, 18, (int) juce::jmap (density, 0.25, 64.0, 4.0, 18.0));
+    const auto grainCount = juce::jlimit (6, 28, (int) juce::jmap (density, 0.25f, 64.0f, 6.0f, 28.0f));
     for (int i = 0; i < grainCount; ++i)
     {
-        const auto phase = (float) i / (float) grainCount;
-        const auto x = loopRect.getX() + loopRect.getWidth() * phase;
-        const auto size = 6.0f + 10.0f * std::sin (phase * juce::MathConstants<float>::pi);
-        g.setColour (white.withAlpha (0.75f - 0.5f * phase));
-        g.drawEllipse (x - size * 0.5f, (float) waveformArea.getCentreY() - size * 0.5f, size, size, 0.9f);
+        const auto phase = (float) i / (float) juce::jmax (1, grainCount - 1);
+        const auto angle = juce::jmap (phase, startAngle, endAngle);
+        const auto orbit = radius * (0.78f + 0.36f * std::sin (phase * juce::MathConstants<float>::pi));
+        const auto x = centre.x + std::cos (angle) * orbit;
+        const auto y = centre.y + std::sin (angle) * orbit;
+        const auto grainRadius = 2.5f + 7.0f * std::sin ((phase + 0.08f) * juce::MathConstants<float>::pi);
+
+        g.setColour (white.withAlpha (0.14f + 0.55f * (1.0f - phase)));
+        g.fillEllipse (x - grainRadius, y - grainRadius, grainRadius * 2.0f, grainRadius * 2.0f);
     }
+
+    juce::Path horizon;
+    const auto horizonY = canvas.getBottom() - 42.0f;
+    for (int i = 0; i < 7; ++i)
+    {
+        const auto phase = (float) i / 6.0f;
+        const auto x = canvas.getX() + phase * canvas.getWidth();
+        const auto vertical = std::sin ((phase + scrub * 0.6f) * juce::MathConstants<float>::twoPi) * 10.0f;
+        if (i == 0)
+            horizon.startNewSubPath (x, horizonY + vertical);
+        else
+            horizon.lineTo (x, horizonY + vertical);
+    }
+    g.setColour (whiteFaint);
+    g.strokePath (horizon, juce::PathStrokeType (1.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+    g.setColour (whiteDim);
+    g.drawText (audioProcessor.isFrozen() ? "FROZEN" : "LIVE", canvas.removeFromBottom (20).toNearestInt(), juce::Justification::centred);
 }
 
 void GrannyAudioProcessorEditor::resized()
@@ -456,11 +487,26 @@ bool GrannyAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 {
     if (key == juce::KeyPress::tabKey)
     {
-        showingVisualizer = ! showingVisualizer;
-        resized();
-        repaint();
+        toggleVisualizer();
         return true;
     }
 
     return juce::AudioProcessorEditor::keyPressed (key);
+}
+
+bool GrannyAudioProcessorEditor::keyPressed (const juce::KeyPress& key, juce::Component*)
+{
+    if (key == juce::KeyPress::tabKey)
+    {
+        toggleVisualizer();
+        return true;
+    }
+
+    return false;
+}
+
+void GrannyAudioProcessorEditor::mouseDown (const juce::MouseEvent& event)
+{
+    juce::ignoreUnused (event);
+    grabKeyboardFocus();
 }

@@ -4,6 +4,7 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 
 class GrannyAudioProcessorEditor final : public juce::AudioProcessorEditor,
+                                         private juce::KeyListener,
                                          private juce::Timer
 {
 public:
@@ -13,6 +14,7 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     bool keyPressed (const juce::KeyPress& key) override;
+    void mouseDown (const juce::MouseEvent& event) override;
 
 private:
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
@@ -23,7 +25,10 @@ private:
     void configureSlider (juce::Slider& slider, juce::Label& label, const juce::String& text);
     void configureCombo (juce::ComboBox& combo, juce::Label& label, const juce::String& text);
     void configureCaption (juce::Label& label, const juce::String& text, juce::Justification justification);
+    void registerTabKeyTarget (juce::Component& component);
+    void toggleVisualizer();
     void setControlsVisible (bool shouldBeVisible);
+    bool keyPressed (const juce::KeyPress& key, juce::Component* originatingComponent) override;
 
     GrannyAudioProcessor& audioProcessor;
 
