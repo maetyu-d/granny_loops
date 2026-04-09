@@ -12,7 +12,7 @@ endif()
 add_subdirectory(${JUCE_DIR} JUCE)
 
 juce_add_plugin(Granny
-    COMPANY_NAME "Codex"
+    COMPANY_NAME "matd.space"
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT FALSE
     NEEDS_MIDI_OUTPUT FALSE
