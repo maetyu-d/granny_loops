@@ -163,6 +163,7 @@ GrannyAudioProcessorEditor::GrannyAudioProcessorEditor (GrannyAudioProcessor& p)
     pitchAttachment = std::make_unique<ComboAttachment> (state, "pitchMode", pitchModeBox);
 
     setSize (1120, 620);
+    setWantsKeyboardFocus (true);
     startTimerHz (8);
 }
 
@@ -175,6 +176,8 @@ GrannyAudioProcessorEditor::~GrannyAudioProcessorEditor()
 void GrannyAudioProcessorEditor::timerCallback()
 {
     presetBox.setSelectedItemIndex (audioProcessor.getCurrentProgram(), juce::dontSendNotification);
+    audioProcessor.getWaveformSnapshot (waveformSnapshot, 512);
+    repaint();
 }
 
 void GrannyAudioProcessorEditor::configureCaption (juce::Label& label, const juce::String& text, juce::Justification justification)
@@ -212,6 +215,21 @@ void GrannyAudioProcessorEditor::configureCombo (juce::ComboBox& combo, juce::La
     addAndMakeVisible (label);
 }
 
+void GrannyAudioProcessorEditor::setControlsVisible (bool shouldBeVisible)
+{
+    for (auto* component : std::initializer_list<juce::Component*> {
+             &presetBox, &freezeButton, &stretchEngineBox, &outputMonitorBox, &directionBox, &pitchModeBox,
+             &bufferSlider, &scrubSlider, &grainSizeSlider, &densitySlider, &speedSlider, &stretchSlider,
+             &spliceSlider, &ageSlider, &blurSlider, &slipSlider, &bloomSlider, &regenSlider, &mixSlider, &clockSlider,
+             &bufferLabel, &scrubLabel, &grainSizeLabel, &densityLabel, &speedLabel, &stretchLabel, &spliceLabel,
+             &ageLabel, &blurLabel, &slipLabel, &bloomLabel, &regenLabel, &mixLabel, &clockLabel,
+             &presetLabel, &modeLabel, &stretchEngineModeLabel, &monitorModeLabel, &directionLabel, &pitchLabel,
+             &captureSectionLabel, &stretchSectionLabel, &textureSectionLabel, &outputSectionLabel,
+             &titleLabel, &subtitleLabel, &engineLabel })
+        if (component != nullptr)
+            component->setVisible (shouldBeVisible);
+}
+
 void GrannyAudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.fillAll (panelFillAlt);
@@ -227,7 +245,7 @@ void GrannyAudioProcessorEditor::paint (juce::Graphics& g)
     g.drawRect (body, 1);
 
     auto content = body.reduced (10);
-    auto utility = content.removeFromTop (58);
+    auto utility = content.removeFromTop (44);
     content.removeFromTop (10);
     auto columns = content;
 
@@ -239,23 +257,120 @@ void GrannyAudioProcessorEditor::paint (juce::Graphics& g)
         g.drawRoundedRectangle (area.toFloat(), radius, 0.8f);
     };
 
-    drawPanel (utility, 8.0f);
+    if (! showingVisualizer)
+    {
+        drawPanel (utility, 8.0f);
 
-    const int columnGap = 16;
-    auto leftColumn = columns.removeFromLeft ((columns.getWidth() - columnGap) / 2);
-    columns.removeFromLeft (columnGap);
-    auto rightColumn = columns;
+        const int columnGap = 16;
+        auto leftColumn = columns.removeFromLeft ((columns.getWidth() - columnGap) / 2);
+        columns.removeFromLeft (columnGap);
+        auto rightColumn = columns;
 
-    drawPanel (leftColumn, 10.0f);
-    drawPanel (rightColumn, 10.0f);
+        drawPanel (leftColumn, 10.0f);
+        drawPanel (rightColumn, 10.0f);
+        return;
+    }
+
+    auto visualBounds = body.reduced (22);
+    g.setColour (whiteFaint);
+    g.drawRect (visualBounds, 1);
+
+    auto heading = visualBounds.removeFromTop (34);
+    g.setColour (textDim);
+    g.setFont (juce::Font (juce::FontOptions (12.0f).withStyle ("Bold")));
+    g.drawText ("GRAIN / LOOP VISUALISER", heading.removeFromLeft (240), juce::Justification::centredLeft);
+    g.setColour (whiteDim);
+    g.drawText ("TAB TO RETURN", heading.removeFromRight (180), juce::Justification::centredRight);
+
+    auto infoRow = visualBounds.removeFromTop (28);
+    const auto monitorText = outputMonitorBox.getText().isEmpty() ? juce::String ("Full") : outputMonitorBox.getText();
+    const auto engineText = stretchEngineBox.getText().isEmpty() ? juce::String ("Hybrid") : stretchEngineBox.getText();
+    g.setColour (whiteDim);
+    g.drawText ("Monitor: " + monitorText + "   Engine: " + engineText + "   Freeze: "
+                + juce::String (audioProcessor.isFrozen() ? "On" : "Off"),
+                infoRow, juce::Justification::centredLeft);
+
+    auto waveformArea = visualBounds.reduced (24, 12);
+    const auto midY = waveformArea.getCentreY();
+    g.setColour (whiteFaint);
+    g.drawHorizontalLine (midY, (float) waveformArea.getX(), (float) waveformArea.getRight());
+
+    if (! waveformSnapshot.empty())
+    {
+        juce::Path waveformPath;
+        const auto width = (float) waveformArea.getWidth();
+        const auto halfHeight = (float) waveformArea.getHeight() * 0.42f;
+        const auto pointCount = std::max<size_t> (1, waveformSnapshot.size() - 1);
+
+        for (size_t i = 0; i < waveformSnapshot.size(); ++i)
+        {
+            const auto x = (float) waveformArea.getX() + (float) i / (float) pointCount * width;
+            const auto amp = juce::jlimit (0.0f, 1.0f, waveformSnapshot[i]);
+            const auto y = (float) midY - amp * halfHeight;
+            if (i == 0)
+                waveformPath.startNewSubPath (x, y);
+            else
+                waveformPath.lineTo (x, y);
+        }
+
+        for (size_t i = waveformSnapshot.size(); i-- > 0;)
+        {
+            const auto x = (float) waveformArea.getX() + (float) i / (float) pointCount * width;
+            const auto amp = juce::jlimit (0.0f, 1.0f, waveformSnapshot[i]);
+            const auto y = (float) midY + amp * halfHeight;
+            waveformPath.lineTo (x, y);
+        }
+
+        waveformPath.closeSubPath();
+        g.setColour (juce::Colour::fromRGBA (255, 255, 255, 16));
+        g.fillPath (waveformPath);
+        g.setColour (white);
+        g.strokePath (waveformPath, juce::PathStrokeType (0.9f));
+    }
+
+    const auto scrubX = (float) waveformArea.getX() + audioProcessor.getScrubPosition() * (float) waveformArea.getWidth();
+    const auto grainMs = grainSizeSlider.getValue();
+    const auto bufferSeconds = bufferSlider.getValue();
+    const auto grainWidth = juce::jlimit (18.0f, (float) waveformArea.getWidth() * 0.65f,
+                                          (float) waveformArea.getWidth() * (float) (grainMs * 0.001 / juce::jmax (0.1, bufferSeconds)));
+    const auto loopRect = juce::Rectangle<float> (scrubX - grainWidth * 0.5f,
+                                                  (float) waveformArea.getY() + 18.0f,
+                                                  grainWidth,
+                                                  (float) waveformArea.getHeight() - 36.0f)
+                              .constrainedWithin (waveformArea.toFloat());
+
+    g.setColour (white.withAlpha (0.16f));
+    g.fillRect (loopRect);
+    g.setColour (white.withAlpha (0.45f));
+    g.drawRect (loopRect, 1.0f);
+    g.setColour (white);
+    g.drawLine (scrubX, (float) waveformArea.getY(), scrubX, (float) waveformArea.getBottom(), 1.2f);
+
+    const auto density = densitySlider.getValue();
+    const auto grainCount = juce::jlimit (4, 18, (int) juce::jmap (density, 0.25, 64.0, 4.0, 18.0));
+    for (int i = 0; i < grainCount; ++i)
+    {
+        const auto phase = (float) i / (float) grainCount;
+        const auto x = loopRect.getX() + loopRect.getWidth() * phase;
+        const auto size = 6.0f + 10.0f * std::sin (phase * juce::MathConstants<float>::pi);
+        g.setColour (white.withAlpha (0.75f - 0.5f * phase));
+        g.drawEllipse (x - size * 0.5f, (float) waveformArea.getCentreY() - size * 0.5f, size, size, 0.9f);
+    }
 }
 
 void GrannyAudioProcessorEditor::resized()
 {
+    if (showingVisualizer)
+    {
+        setControlsVisible (false);
+        return;
+    }
+
+    setControlsVisible (true);
     auto body = getLocalBounds().reduced (24);
 
     auto bodyArea = body.reduced (10);
-    auto utilityArea = bodyArea.removeFromTop (58).reduced (10);
+    auto utilityArea = bodyArea.removeFromTop (44).reduced (10);
     bodyArea.removeFromTop (10);
 
     titleLabel.setBounds (0, 0, 0, 0);
@@ -264,8 +379,6 @@ void GrannyAudioProcessorEditor::resized()
     stretchSectionLabel.setBounds (0, 0, 0, 0);
     outputSectionLabel.setBounds (0, 0, 0, 0);
 
-    utilityArea.removeFromTop (10);
-
     presetLabel.setBounds (0, 0, 0, 0);
     modeLabel.setBounds (0, 0, 0, 0);
     stretchEngineModeLabel.setBounds (0, 0, 0, 0);
@@ -273,11 +386,13 @@ void GrannyAudioProcessorEditor::resized()
     directionLabel.setBounds (0, 0, 0, 0);
     pitchLabel.setBounds (0, 0, 0, 0);
 
-    auto utilityRow = utilityArea.removeFromTop (36);
-    const int gap = 12;
-    const int presetCell = 280;
-    const int freezeCell = 140;
-    const int smallCell = (utilityRow.getWidth() - presetCell - freezeCell - gap * 5) / 4;
+    auto utilityRow = utilityArea.removeFromTop (24);
+    utilityRow = utilityRow.withSizeKeepingCentre (utilityArea.getWidth(), 30);
+    const int gap = 10;
+    const int presetCell = 250;
+    const int freezeCell = 120;
+    const int remaining = utilityRow.getWidth() - presetCell - freezeCell - gap * 5;
+    const int smallCell = juce::jmax (110, remaining / 4);
 
     presetBox.setBounds (utilityRow.removeFromLeft (presetCell));
     utilityRow.removeFromLeft (gap);
@@ -335,4 +450,17 @@ void GrannyAudioProcessorEditor::resized()
 
     captureSectionLabel.setBounds (0, 0, 0, 0);
     textureSectionLabel.setBounds (0, 0, 0, 0);
+}
+
+bool GrannyAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
+{
+    if (key == juce::KeyPress::tabKey)
+    {
+        showingVisualizer = ! showingVisualizer;
+        resized();
+        repaint();
+        return true;
+    }
+
+    return juce::AudioProcessorEditor::keyPressed (key);
 }

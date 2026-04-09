@@ -28,28 +28,55 @@ juce::StringArray outputMonitorChoices()
     return { "Full", "Errors Only" };
 }
 
+double sanitiseSampleRate (double requestedRate, double fallbackRate)
+{
+    constexpr std::array<double, 6> standardRates { 44100.0, 48000.0, 88200.0, 96000.0, 176400.0, 192000.0 };
+
+    if (! std::isfinite (requestedRate) || requestedRate < 8000.0 || requestedRate > 384000.0)
+        return fallbackRate > 0.0 ? fallbackRate : 44100.0;
+
+    auto nearestRate = standardRates.front();
+    auto nearestDistance = std::abs (requestedRate - nearestRate);
+
+    for (auto rate : standardRates)
+    {
+        const auto distance = std::abs (requestedRate - rate);
+        if (distance < nearestDistance)
+        {
+            nearestRate = rate;
+            nearestDistance = distance;
+        }
+    }
+
+    const auto deviation = nearestDistance / nearestRate;
+    if (deviation <= 0.005)
+        return nearestRate;
+
+    return fallbackRate > 0.0 ? fallbackRate : requestedRate;
+}
+
 const std::vector<GrannyAudioProcessor::PresetDefinition>& presetDefinitions()
 {
     static const std::vector<GrannyAudioProcessor::PresetDefinition> presets
     {
         { "Manual",        8.0f,  false, 0.50f, 180.0f,  8.0f, 1.00f, 1.00f, 0.00f, 0.08f, 0.05f, 0.10f, 0.15f, 0.35f, 0.60f, 0, 0,  0.0f },
-        { "Tape Flutter",  1.2f,  false, 0.34f,  32.0f, 22.0f, 0.86f, 0.80f, 0.08f, 0.45f, 0.08f, 0.24f, 0.16f, 0.18f, 0.38f, 0, 0, -1.8f },
-        { "Micro Slice",   0.35f, true,  0.16f,  18.0f, 54.0f, 0.98f, 1.45f, 0.18f, 0.22f, 0.06f, 0.22f, 0.28f, 0.14f, 0.70f, 0, 0,  0.0f },
-        { "Needle Loop",   0.22f, true,  0.71f,  26.0f, 61.0f, 0.74f, 1.70f, 0.28f, 0.36f, 0.05f, 0.36f, 0.20f, 0.22f, 0.76f, 2, 0, -7.0f },
-        { "Pixel Repeater",0.42f, false, 0.48f,  14.0f, 64.0f, 1.42f, 1.10f, 0.82f, 0.18f, 0.10f, 0.72f, 0.18f, 0.10f, 0.58f, 3, 1,  0.0f },
-        { "Slip Mosaic",   0.55f, true,  0.32f,  42.0f, 34.0f, 0.91f, 1.85f, 0.64f, 0.34f, 0.12f, 0.82f, 0.44f, 0.36f, 0.74f, 3, 2,  3.0f },
-        { "Broken Halo",   6.8f,  false, 0.57f, 220.0f, 10.0f, 0.68f, 2.40f, 0.52f, 0.58f, 0.42f, 0.48f, 0.78f, 0.71f, 0.66f, 2, 2, -4.0f },
-        { "Reverse Ash",   3.1f,  false, 0.82f,  96.0f, 18.0f, 0.73f, 1.60f, 0.74f, 0.41f, 0.14f, 0.74f, 0.32f, 0.58f, 0.63f, 3, 0, -9.0f },
-        { "Dust Bloom",    9.5f,  false, 0.41f, 310.0f,  5.8f, 0.57f, 2.80f, 0.24f, 0.52f, 0.56f, 0.28f, 0.92f, 0.79f, 0.68f, 0, 2,  5.0f },
-        { "Count Fracture",0.63f, true,  0.58f,  33.0f, 41.0f, 1.18f, 1.30f, 0.91f, 0.26f, 0.14f, 0.94f, 0.26f, 0.27f, 0.72f, 3, 1, -2.0f },
-        { "Glass Rain",   11.5f,  false, 0.68f, 240.0f, 13.0f, 0.72f, 2.10f, 0.36f, 0.22f, 0.34f, 0.34f, 0.72f, 0.56f, 0.58f, 2, 2,  0.0f },
-        { "Frozen Choir", 14.0f,  true,  0.52f, 420.0f,  7.5f, 0.52f, 3.10f, 0.20f, 0.48f, 0.62f, 0.18f, 0.86f, 0.74f, 0.72f, 0, 2,  7.0f },
-        { "Reverse Bloom", 9.5f,  false, 0.76f, 310.0f,  6.0f, 0.78f, 2.30f, 0.30f, 0.28f, 0.30f, 0.22f, 0.80f, 0.63f, 0.66f, 1, 0,  0.0f },
-        { "Shimmer Arc",   7.0f,  false, 0.43f, 170.0f, 11.5f, 1.12f, 1.50f, 0.22f, 0.14f, 0.18f, 0.24f, 0.54f, 0.49f, 0.60f, 0, 1,  8.5f },
-        { "Dust Loop",     3.4f,  true,  0.18f,  84.0f, 28.0f, 0.61f, 1.95f, 0.44f, 0.52f, 0.12f, 0.64f, 0.30f, 0.28f, 0.54f, 2, 0, -5.0f },
-        { "Cathedral",    18.0f,  false, 0.59f, 620.0f,  3.6f, 0.44f, 3.40f, 0.14f, 0.66f, 0.74f, 0.12f, 0.96f, 0.82f, 0.74f, 0, 2, -2.5f },
-        { "Strobe Mist",   0.8f,  false, 0.48f,  22.0f, 44.0f, 1.48f, 0.62f, 0.66f, 0.18f, 0.08f, 0.78f, 0.12f, 0.12f, 0.46f, 2, 1,  0.0f },
-        { "Octave Drift",  5.5f,  false, 0.64f, 130.0f, 17.0f, 1.31f, 1.75f, 0.34f, 0.32f, 0.18f, 0.30f, 0.58f, 0.41f, 0.57f, 0, 2, 12.0f }
+        { "Tape Flutter",  1.2f,  false, 0.34f,  34.0f, 20.0f, 0.82f, 1.05f, 0.10f, 0.56f, 0.12f, 0.31f, 0.22f, 0.22f, 0.44f, 0, 0, -2.2f },
+        { "Micro Slice",   0.28f, true,  0.14f,  16.0f, 61.0f, 0.93f, 1.70f, 0.24f, 0.28f, 0.08f, 0.34f, 0.34f, 0.17f, 0.72f, 0, 0,  0.0f },
+        { "Needle Loop",   0.19f, true,  0.73f,  22.0f, 66.0f, 0.69f, 2.10f, 0.34f, 0.42f, 0.06f, 0.44f, 0.24f, 0.28f, 0.78f, 2, 0, -8.5f },
+        { "Pixel Repeater",0.38f, false, 0.47f,  12.0f, 68.0f, 1.36f, 1.28f, 0.92f, 0.24f, 0.12f, 0.84f, 0.24f, 0.12f, 0.61f, 3, 1,  0.0f },
+        { "Slip Mosaic",   0.48f, true,  0.28f,  36.0f, 38.0f, 0.86f, 2.10f, 0.72f, 0.46f, 0.18f, 0.90f, 0.54f, 0.43f, 0.76f, 3, 2,  2.5f },
+        { "Broken Halo",   5.9f,  false, 0.55f, 180.0f, 11.0f, 0.62f, 2.90f, 0.58f, 0.70f, 0.54f, 0.56f, 0.84f, 0.77f, 0.68f, 2, 2, -5.5f },
+        { "Reverse Ash",   2.8f,  false, 0.84f,  88.0f, 19.0f, 0.68f, 1.95f, 0.82f, 0.52f, 0.18f, 0.82f, 0.42f, 0.64f, 0.66f, 3, 0, -9.5f },
+        { "Dust Bloom",    8.8f,  false, 0.39f, 280.0f,  5.2f, 0.52f, 3.20f, 0.32f, 0.64f, 0.68f, 0.34f, 0.98f, 0.86f, 0.70f, 0, 2,  4.0f },
+        { "Count Fracture",0.58f, true,  0.61f,  28.0f, 44.0f, 1.11f, 1.52f, 0.96f, 0.34f, 0.18f, 0.98f, 0.34f, 0.31f, 0.74f, 3, 1, -3.0f },
+        { "Glass Rain",   10.5f,  false, 0.71f, 210.0f, 12.0f, 0.68f, 2.45f, 0.44f, 0.34f, 0.46f, 0.44f, 0.80f, 0.62f, 0.60f, 2, 2,  0.0f },
+        { "Frozen Choir", 16.0f,  true,  0.56f, 460.0f,  6.8f, 0.48f, 3.50f, 0.26f, 0.58f, 0.74f, 0.22f, 0.92f, 0.82f, 0.74f, 0, 2,  8.0f },
+        { "Reverse Bloom", 8.9f,  false, 0.78f, 260.0f,  6.4f, 0.71f, 2.65f, 0.36f, 0.38f, 0.42f, 0.28f, 0.88f, 0.71f, 0.68f, 1, 0, -1.5f },
+        { "Shimmer Arc",   6.2f,  false, 0.46f, 150.0f, 10.5f, 1.04f, 1.82f, 0.28f, 0.24f, 0.24f, 0.34f, 0.62f, 0.58f, 0.62f, 0, 1,  9.0f },
+        { "Dust Loop",     2.8f,  true,  0.22f,  72.0f, 26.0f, 0.58f, 2.20f, 0.52f, 0.62f, 0.18f, 0.72f, 0.38f, 0.34f, 0.57f, 2, 0, -6.0f },
+        { "Cathedral",    18.5f,  false, 0.61f, 560.0f,  3.1f, 0.39f, 3.70f, 0.18f, 0.78f, 0.84f, 0.18f, 1.00f, 0.90f, 0.76f, 0, 2, -3.0f },
+        { "Strobe Mist",   0.72f, false, 0.51f,  18.0f, 48.0f, 1.42f, 0.78f, 0.76f, 0.24f, 0.10f, 0.86f, 0.16f, 0.16f, 0.50f, 2, 1,  0.0f },
+        { "Octave Drift",  4.8f,  false, 0.66f, 120.0f, 15.0f, 1.24f, 2.05f, 0.42f, 0.40f, 0.24f, 0.40f, 0.66f, 0.47f, 0.59f, 0, 2, 12.0f }
     };
 
     return presets;
@@ -158,7 +185,7 @@ void GrannyAudioProcessor::changeProgramName (int, const juce::String&)
 
 void GrannyAudioProcessor::prepareToPlay (double sampleRate, int)
 {
-    resetEngineState (sampleRate);
+    resetEngineState (sanitiseSampleRate (sampleRate, currentSampleRate));
     refreshCachedParameters();
 }
 
@@ -180,7 +207,7 @@ bool GrannyAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) c
 void GrannyAudioProcessor::parameterChanged (const juce::String& parameterID, float)
 {
     if (parameterID == "stretchEngine")
-        resetSpectralState();
+        spectralResetPending.store (true);
 
     refreshCachedParameters();
 }
@@ -244,14 +271,11 @@ void GrannyAudioProcessor::getWaveformSnapshot (std::vector<float>& destination,
 
     destination.resize (static_cast<size_t> (numPoints), 0.0f);
 
-    const juce::SpinLock::ScopedLockType lock (delayBufferLock);
-
-    if (delayBuffer.getNumSamples() == 0)
+    if (waveformDisplayBuffer == nullptr)
         return;
 
-    const auto* left = delayBuffer.getReadPointer (0);
-    const auto* right = delayBuffer.getReadPointer (1);
-    const auto anchor = lastFreezeState ? freezeWritePosition : writePosition;
+    const auto anchor = lastFreezeState ? visualFreezeWritePosition.load (std::memory_order_relaxed)
+                                        : visualWritePosition.load (std::memory_order_relaxed);
     auto readStart = anchor - activeSamples;
 
     for (int point = 0; point < numPoints; ++point)
@@ -263,7 +287,7 @@ void GrannyAudioProcessor::getWaveformSnapshot (std::vector<float>& destination,
         for (int sample = begin; sample < end; ++sample)
         {
             const auto index = wrapSampleIndex (sample);
-            const auto mono = 0.5f * (std::abs (left[index]) + std::abs (right[index]));
+            const auto mono = waveformDisplayBuffer[static_cast<size_t> (index)].load (std::memory_order_relaxed);
             peak = juce::jmax (peak, mono);
         }
 
@@ -283,20 +307,25 @@ bool GrannyAudioProcessor::isFrozen() const
 
 void GrannyAudioProcessor::resetEngineState (double newSampleRate)
 {
-    currentSampleRate = juce::jmax (1.0, newSampleRate);
+    currentSampleRate = sanitiseSampleRate (newSampleRate, currentSampleRate);
     delayBufferSize = juce::jmax (1, static_cast<int> (std::ceil (20.0 * currentSampleRate)));
     spectralFftSize = 1 << spectralFftOrder;
     spectralHopSamples = spectralFftSize / 8;
     spectralFft = std::make_unique<juce::dsp::FFT> (spectralFftOrder);
     spectralWindow.resize (static_cast<size_t> (spectralFftSize));
     spectralAnalysisMagnitudes.resize (static_cast<size_t> (spectralFftSize / 2 + 1), 0.0f);
+    waveformDisplayBuffer = std::make_unique<std::atomic<float>[]> (static_cast<size_t> (delayBufferSize));
 
     for (int i = 0; i < spectralFftSize; ++i)
         spectralWindow[static_cast<size_t> (i)] = 0.5f - 0.5f * std::cos (juce::MathConstants<float>::twoPi * (float) i / (float) (spectralFftSize - 1));
 
-    const juce::SpinLock::ScopedLockType lock (delayBufferLock);
     delayBuffer.setSize (2, delayBufferSize);
     delayBuffer.clear();
+
+    for (int i = 0; i < delayBufferSize; ++i)
+        waveformDisplayBuffer[static_cast<size_t> (i)].store (0.0f, std::memory_order_relaxed);
+
+    prepareSpectralBuffers();
 
     for (auto& grain : grains)
         grain = {};
@@ -316,7 +345,7 @@ void GrannyAudioProcessor::resetEngineState (double newSampleRate)
     tonalMidLowState = {};
     transientLowState = {};
     artefactLowState = {};
-    resetSpectralState();
+    clearSpectralState (true);
     launchPhase = 0.0f;
     stretchLaunchPhase = 0.0f;
     transientLaunchPhase = 0.0f;
@@ -335,6 +364,9 @@ void GrannyAudioProcessor::resetEngineState (double newSampleRate)
     transientAnalysisValid = false;
     transientReferenceValid = false;
     lastFreezeState = false;
+    spectralResetPending.store (false);
+    visualWritePosition.store (0, std::memory_order_relaxed);
+    visualFreezeWritePosition.store (0, std::memory_order_relaxed);
 }
 
 void GrannyAudioProcessor::refreshCachedParameters()
@@ -342,11 +374,8 @@ void GrannyAudioProcessor::refreshCachedParameters()
     updateFreezeState();
 }
 
-void GrannyAudioProcessor::resetSpectralState()
+void GrannyAudioProcessor::prepareSpectralBuffers()
 {
-    spectralAnalysisPosition = 0.0;
-    spectralStateValid = false;
-
     for (auto& state : spectralStates)
     {
         state = {};
@@ -354,8 +383,41 @@ void GrannyAudioProcessor::resetSpectralState()
         state.ifftBuffer.assign (static_cast<size_t> (juce::jmax (1, spectralFftSize)), {});
         state.outputAccum.assign (static_cast<size_t> (juce::jmax (2, spectralFftSize * 4)), 0.0f);
         state.lastPhase.assign (static_cast<size_t> (juce::jmax (1, spectralFftSize / 2 + 1)), 0.0f);
+        state.priorPhase.assign (static_cast<size_t> (juce::jmax (1, spectralFftSize / 2 + 1)), 0.0f);
         state.phaseAccumulator.assign (static_cast<size_t> (juce::jmax (1, spectralFftSize / 2 + 1)), 0.0f);
         state.previousMagnitudes.assign (static_cast<size_t> (juce::jmax (1, spectralFftSize / 2 + 1)), 0.0f);
+        state.magnitudes.assign (static_cast<size_t> (juce::jmax (1, spectralFftSize / 2 + 1)), 0.0f);
+        state.analysisPhases.assign (static_cast<size_t> (juce::jmax (1, spectralFftSize / 2 + 1)), 0.0f);
+        state.lockedPeakPhases.assign (static_cast<size_t> (juce::jmax (1, spectralFftSize / 2 + 1)), 0.0f);
+        state.peakPhaseReady.assign (static_cast<size_t> (juce::jmax (1, spectralFftSize / 2 + 1)), 0);
+        state.peakOwners.assign (static_cast<size_t> (juce::jmax (1, spectralFftSize / 2 + 1)), 0);
+    }
+}
+
+void GrannyAudioProcessor::clearSpectralState (bool clearOutput)
+{
+    spectralAnalysisPosition = 0.0;
+    spectralStateValid = false;
+
+    for (auto& state : spectralStates)
+    {
+        std::fill (state.fftBuffer.begin(), state.fftBuffer.end(), juce::dsp::Complex<float> {});
+        std::fill (state.ifftBuffer.begin(), state.ifftBuffer.end(), juce::dsp::Complex<float> {});
+        std::fill (state.lastPhase.begin(), state.lastPhase.end(), 0.0f);
+        std::fill (state.priorPhase.begin(), state.priorPhase.end(), 0.0f);
+        std::fill (state.phaseAccumulator.begin(), state.phaseAccumulator.end(), 0.0f);
+        std::fill (state.previousMagnitudes.begin(), state.previousMagnitudes.end(), 0.0f);
+        std::fill (state.magnitudes.begin(), state.magnitudes.end(), 0.0f);
+        std::fill (state.analysisPhases.begin(), state.analysisPhases.end(), 0.0f);
+        std::fill (state.lockedPeakPhases.begin(), state.lockedPeakPhases.end(), 0.0f);
+        std::fill (state.peakPhaseReady.begin(), state.peakPhaseReady.end(), static_cast<uint8_t> (0));
+        std::fill (state.peakOwners.begin(), state.peakOwners.end(), 0);
+
+        if (clearOutput)
+        {
+            std::fill (state.outputAccum.begin(), state.outputAccum.end(), 0.0f);
+            state.outputIndex = 0;
+        }
     }
 }
 
@@ -364,7 +426,10 @@ void GrannyAudioProcessor::updateFreezeState()
     const bool freezeEnabled = freezeParam != nullptr && freezeParam->load() >= 0.5f;
 
     if (freezeEnabled && ! lastFreezeState)
+    {
         freezeWritePosition = writePosition;
+        visualFreezeWritePosition.store (freezeWritePosition, std::memory_order_relaxed);
+    }
 
     lastFreezeState = freezeEnabled;
 }
@@ -721,9 +786,6 @@ void GrannyAudioProcessor::processSpectralFrame (double analysisPosition, double
     const auto expectedPhaseAdvance = juce::MathConstants<float>::twoPi * static_cast<float> (analysisHop)
                                     / static_cast<float> (spectralFftSize);
     const auto transientTightness = juce::jlimit (0.0f, 1.0f, juce::jmap (stretchTransientEnvelope, 0.01f, 0.16f, 0.0f, 1.0f));
-    std::vector<float> magnitudes (static_cast<size_t> (spectralFftSize / 2 + 1), 0.0f);
-    std::vector<float> analysisPhases (static_cast<size_t> (spectralFftSize / 2 + 1), 0.0f);
-    std::vector<int> peakOwners (static_cast<size_t> (spectralFftSize / 2 + 1), 0);
 
     for (int channel = 0; channel < 2; ++channel)
     {
@@ -731,6 +793,8 @@ void GrannyAudioProcessor::processSpectralFrame (double analysisPosition, double
 
         if (state.fftBuffer.size() != static_cast<size_t> (spectralFftSize))
             continue;
+
+        state.priorPhase = state.lastPhase;
 
         for (int i = 0; i < spectralFftSize; ++i)
         {
@@ -746,34 +810,32 @@ void GrannyAudioProcessor::processSpectralFrame (double analysisPosition, double
         for (int bin = 0; bin <= spectralFftSize / 2; ++bin)
         {
             const auto value = state.ifftBuffer[static_cast<size_t> (bin)];
-            magnitudes[static_cast<size_t> (bin)] = std::abs (value);
-            analysisPhases[static_cast<size_t> (bin)] = std::atan2 (value.imag(), value.real());
-            peakOwners[static_cast<size_t> (bin)] = bin;
+            state.magnitudes[static_cast<size_t> (bin)] = std::abs (value);
+            state.analysisPhases[static_cast<size_t> (bin)] = std::atan2 (value.imag(), value.real());
+            state.peakOwners[static_cast<size_t> (bin)] = bin;
         }
 
         int currentPeak = 0;
         for (int bin = 1; bin < spectralFftSize / 2; ++bin)
         {
-            const auto left = magnitudes[static_cast<size_t> (bin - 1)];
-            const auto center = magnitudes[static_cast<size_t> (bin)];
-            const auto right = magnitudes[static_cast<size_t> (bin + 1)];
+            const auto left = state.magnitudes[static_cast<size_t> (bin - 1)];
+            const auto center = state.magnitudes[static_cast<size_t> (bin)];
+            const auto right = state.magnitudes[static_cast<size_t> (bin + 1)];
 
             if (center >= left && center >= right)
                 currentPeak = bin;
 
-            peakOwners[static_cast<size_t> (bin)] = currentPeak;
+            state.peakOwners[static_cast<size_t> (bin)] = currentPeak;
         }
 
-        std::vector<float> lockedPeakPhases (static_cast<size_t> (spectralFftSize / 2 + 1), 0.0f);
-        std::vector<bool> peakPhaseReady (static_cast<size_t> (spectralFftSize / 2 + 1), false);
-        const auto previousPhases = state.lastPhase;
-        const auto previousMagnitudes = state.previousMagnitudes;
+        std::fill (state.lockedPeakPhases.begin(), state.lockedPeakPhases.end(), 0.0f);
+        std::fill (state.peakPhaseReady.begin(), state.peakPhaseReady.end(), static_cast<uint8_t> (0));
 
         for (int bin = 0; bin <= spectralFftSize / 2; ++bin)
         {
-            const auto magnitude = magnitudes[static_cast<size_t> (bin)];
-            const auto phase = analysisPhases[static_cast<size_t> (bin)];
-            const auto previousPhase = previousPhases[static_cast<size_t> (bin)];
+            const auto magnitude = state.magnitudes[static_cast<size_t> (bin)];
+            const auto phase = state.analysisPhases[static_cast<size_t> (bin)];
+            const auto previousPhase = state.priorPhase[static_cast<size_t> (bin)];
             auto deltaPhase = phase - previousPhase - expectedPhaseAdvance * static_cast<float> (bin);
 
             while (deltaPhase < -juce::MathConstants<float>::pi)
@@ -781,21 +843,22 @@ void GrannyAudioProcessor::processSpectralFrame (double analysisPosition, double
             while (deltaPhase > juce::MathConstants<float>::pi)
                 deltaPhase -= juce::MathConstants<float>::twoPi;
 
+            const auto previousMagnitude = state.previousMagnitudes[static_cast<size_t> (bin)];
             state.lastPhase[static_cast<size_t> (bin)] = phase;
             state.previousMagnitudes[static_cast<size_t> (bin)] = magnitude;
-            const auto owner = peakOwners[static_cast<size_t> (bin)];
+            const auto owner = state.peakOwners[static_cast<size_t> (bin)];
             auto lockedPhase = phase;
-            const auto flux = juce::jmax (0.0f, magnitude - previousMagnitudes[static_cast<size_t> (bin)]);
+            const auto flux = juce::jmax (0.0f, magnitude - previousMagnitude);
             const auto normalisedFlux = flux / (magnitude + 1.0e-5f);
             const auto transientFreeze = juce::jlimit (0.0f, 1.0f, transientTightness
                                                                  * juce::jmap (normalisedFlux, 0.08f, 0.75f, 0.0f, 1.0f));
 
             if (owner != bin)
             {
-                const auto peakPhase = analysisPhases[static_cast<size_t> (owner)];
-                if (! peakPhaseReady[static_cast<size_t> (owner)])
+                const auto peakPhase = state.analysisPhases[static_cast<size_t> (owner)];
+                if (state.peakPhaseReady[static_cast<size_t> (owner)] == 0)
                 {
-                    const auto peakPreviousPhase = previousPhases[static_cast<size_t> (owner)];
+                    const auto peakPreviousPhase = state.priorPhase[static_cast<size_t> (owner)];
                     auto peakDeltaPhase = peakPhase - peakPreviousPhase - expectedPhaseAdvance * static_cast<float> (owner);
 
                     while (peakDeltaPhase < -juce::MathConstants<float>::pi)
@@ -805,11 +868,11 @@ void GrannyAudioProcessor::processSpectralFrame (double analysisPosition, double
 
                     const auto lockedFrequency = expectedPhaseAdvance * static_cast<float> (owner)
                                                + peakDeltaPhase * juce::jmap (pristineBias, 0.92f, 1.0f);
-                    lockedPeakPhases[static_cast<size_t> (owner)] = state.phaseAccumulator[static_cast<size_t> (owner)]
-                                                                   + lockedFrequency
-                                                                   * (static_cast<float> (synthesisHop) / static_cast<float> (spectralHopSamples))
-                                                                   * (1.0f - transientTightness * (0.14f + age * 0.1f));
-                    peakPhaseReady[static_cast<size_t> (owner)] = true;
+                    state.lockedPeakPhases[static_cast<size_t> (owner)] = state.phaseAccumulator[static_cast<size_t> (owner)]
+                                                                         + lockedFrequency
+                                                                         * (static_cast<float> (synthesisHop) / static_cast<float> (spectralHopSamples))
+                                                                         * (1.0f - transientTightness * (0.14f + age * 0.1f));
+                    state.peakPhaseReady[static_cast<size_t> (owner)] = 1;
                 }
 
                 const auto relativePhase = phase - peakPhase;
@@ -817,7 +880,7 @@ void GrannyAudioProcessor::processSpectralFrame (double analysisPosition, double
                                             + (expectedPhaseAdvance * static_cast<float> (bin)
                                                + deltaPhase * juce::jmap (pristineBias, 0.92f, 1.0f))
                                             * (static_cast<float> (synthesisHop) / static_cast<float> (spectralHopSamples));
-                const auto lockedOwnerPhase = lockedPeakPhases[static_cast<size_t> (owner)] + relativePhase;
+                const auto lockedOwnerPhase = state.lockedPeakPhases[static_cast<size_t> (owner)] + relativePhase;
                 const auto lockAmount = juce::jlimit (0.0f, 1.0f,
                                                       juce::jmap (magnitude, 0.0008f, 0.06f, 0.25f, 0.92f)
                                                       * (1.0f - transientFreeze * 0.55f));
@@ -827,12 +890,12 @@ void GrannyAudioProcessor::processSpectralFrame (double analysisPosition, double
             {
                 const auto trueFrequency = expectedPhaseAdvance * static_cast<float> (bin)
                                          + deltaPhase * juce::jmap (pristineBias, 0.92f, 1.0f);
-                lockedPeakPhases[static_cast<size_t> (bin)] = state.phaseAccumulator[static_cast<size_t> (bin)]
-                                                             + trueFrequency
-                                                             * (static_cast<float> (synthesisHop) / static_cast<float> (spectralHopSamples))
-                                                             * (1.0f - transientTightness * (0.18f + age * 0.12f));
-                peakPhaseReady[static_cast<size_t> (bin)] = true;
-                lockedPhase = lockedPeakPhases[static_cast<size_t> (bin)];
+                state.lockedPeakPhases[static_cast<size_t> (bin)] = state.phaseAccumulator[static_cast<size_t> (bin)]
+                                                                   + trueFrequency
+                                                                   * (static_cast<float> (synthesisHop) / static_cast<float> (spectralHopSamples))
+                                                                   * (1.0f - transientTightness * (0.18f + age * 0.12f));
+                state.peakPhaseReady[static_cast<size_t> (bin)] = 1;
+                lockedPhase = state.lockedPeakPhases[static_cast<size_t> (bin)];
             }
 
             if (transientFreeze > 0.001f)
@@ -913,6 +976,9 @@ void GrannyAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
                                                                         * juce::jmap (pristineBias, 0.9f, 0.65f)));
     const auto transientHopSamples = juce::jmax (4, transientWindowSamples / juce::jlimit (3, 8, 3 + static_cast<int> (pristineBias * 4.0f)));
 
+    if (spectralResetPending.exchange (false))
+        clearSpectralState (true);
+
     for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
     {
         const auto inL = buffer.getSample (0, sample);
@@ -938,7 +1004,7 @@ void GrannyAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
             stretchReferenceValid = false;
             transientAnalysisValid = true;
             transientReferenceValid = false;
-            resetSpectralState();
+            clearSpectralState (true);
             spectralStateValid = true;
         }
 
@@ -1120,9 +1186,10 @@ void GrannyAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
             const auto writeL = inL + feedbackFilterLeft * regen;
             const auto writeR = inR + feedbackFilterRight * regen;
 
-            const juce::SpinLock::ScopedLockType lock (delayBufferLock);
             delayBuffer.setSample (0, writePosition, writeL);
             delayBuffer.setSample (1, writePosition, writeR);
+            const auto visualSample = 0.5f * (std::abs (writeL) + std::abs (writeR));
+            waveformDisplayBuffer[static_cast<size_t> (writePosition)].store (visualSample, std::memory_order_relaxed);
         }
 
         launchPhase += launchIncrement;
@@ -1214,7 +1281,10 @@ void GrannyAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         buffer.setSample (1, sample, inR * dryMix + grainRight * wetMix);
 
         if (! freezeEnabled)
+        {
             writePosition = wrapSampleIndex (writePosition + 1);
+            visualWritePosition.store (writePosition, std::memory_order_relaxed);
+        }
     }
 }
 

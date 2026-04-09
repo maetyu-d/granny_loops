@@ -12,6 +12,7 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    bool keyPressed (const juce::KeyPress& key) override;
 
 private:
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
@@ -22,6 +23,7 @@ private:
     void configureSlider (juce::Slider& slider, juce::Label& label, const juce::String& text);
     void configureCombo (juce::ComboBox& combo, juce::Label& label, const juce::String& text);
     void configureCaption (juce::Label& label, const juce::String& text, juce::Justification justification);
+    void setControlsVisible (bool shouldBeVisible);
 
     GrannyAudioProcessor& audioProcessor;
 
@@ -95,6 +97,9 @@ private:
     std::unique_ptr<ComboAttachment> outputMonitorAttachment;
     std::unique_ptr<ComboAttachment> directionAttachment;
     std::unique_ptr<ComboAttachment> pitchAttachment;
+
+    std::vector<float> waveformSnapshot;
+    bool showingVisualizer = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GrannyAudioProcessorEditor)
 };

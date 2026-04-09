@@ -139,21 +139,28 @@ private:
         std::vector<juce::dsp::Complex<float>> ifftBuffer;
         std::vector<float> outputAccum;
         std::vector<float> lastPhase;
+        std::vector<float> priorPhase;
         std::vector<float> phaseAccumulator;
         std::vector<float> previousMagnitudes;
+        std::vector<float> magnitudes;
+        std::vector<float> analysisPhases;
+        std::vector<float> lockedPeakPhases;
+        std::vector<uint8_t> peakPhaseReady;
+        std::vector<int> peakOwners;
         int outputIndex = 0;
     };
 
     void parameterChanged (const juce::String& parameterID, float newValue) override;
     void refreshCachedParameters();
     void updateFreezeState();
+    void prepareSpectralBuffers();
+    void clearSpectralState (bool clearOutput);
     void spawnGrain();
     void spawnStretchSegment (bool transientMode, int windowSamples, int synthesisHopSamples,
                               double& analysisPosition, double& referencePosition,
                               bool& analysisValid, bool& referenceValid,
                               double scanWindowStart, double scanWindowEnd,
                               double sourceAdvance, float age, float slip, float bloom);
-    void resetSpectralState();
     void processSpectralFrame (double analysisPosition, double analysisAdvance,
                                double scanWindowStart, double scanWindowEnd,
                                int synthesisHopSamples, float pristineBias, float age);
@@ -176,7 +183,6 @@ private:
     float popSpectralSample (int channel);
 
     juce::AudioBuffer<float> delayBuffer;
-    mutable juce::SpinLock delayBufferLock;
     std::array<Grain, 64> grains {};
     std::array<StretchSegment, 24> stretchSegments {};
     juce::Random random;
@@ -199,6 +205,7 @@ private:
     std::unique_ptr<juce::dsp::FFT> spectralFft;
     std::vector<float> spectralWindow;
     std::vector<float> spectralAnalysisMagnitudes;
+    std::unique_ptr<std::atomic<float>[]> waveformDisplayBuffer;
     int spectralFftOrder = 11;
     int spectralFftSize = 0;
     int spectralHopSamples = 0;
@@ -222,6 +229,9 @@ private:
     bool transientAnalysisValid = false;
     bool transientReferenceValid = false;
     bool lastFreezeState = false;
+    std::atomic<bool> spectralResetPending { false };
+    std::atomic<int> visualWritePosition { 0 };
+    std::atomic<int> visualFreezeWritePosition { 0 };
     int currentPresetIndex = 0;
 
     std::atomic<float>* bufferSecondsParam = nullptr;
